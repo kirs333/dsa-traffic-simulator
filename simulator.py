@@ -1,13 +1,13 @@
 import time
-from myqueue import Queue 
+from myqueue import Queue    
 
-# Incoming lane queues
+# Lane queues
 AL1 = Queue()
 BL1 = Queue()
 CL1 = Queue()
 DL1 = Queue()
 
-# Priority
+# Priority lane
 AL2 = Queue()
 
 road_map = {
@@ -17,15 +17,8 @@ road_map = {
     "D": DL1
 }
 
-
-RED = 1
-GREEN = 2
-
 TIME_PER_VEHICLE = 1
-
-
-light_queue = ["A", "B", "C", "D"]
-current_light = light_queue[0]
+PRIORITY_LIMIT = 10
 
 
 def read_input():
@@ -33,67 +26,60 @@ def read_input():
     try:
         with open("input.txt", "r") as f:
             lines = f.readlines()
+
+        # Clear file after reading
         open("input.txt", "w").close()
 
         for road in lines:
             road = road.strip()
             if road in road_map:
                 road_map[road].enqueue("V")
-
-                # Road A lane 2 is priority
-                if road == "A":
-                    AL2.enqueue("V")
-
     except FileNotFoundError:
         pass
 
 
-def serve_queue(queue, vehicles):
-    """Serve given number of vehicles from a queue"""
+def serve(queue, count):
+    """Serve vehicles from a queue"""
     served = 0
-    while not queue.is_empty() and served < vehicles:
+    while not queue.is_empty() and served < count:
         queue.dequeue()
         served += 1
     return served
 
 
-def next_light():
-    """Rotate traffic light (Day 4 logic)"""
-    global current_light
-    light_queue.append(light_queue.pop(0))
-    current_light = light_queue[0]
-
-
 while True:
     read_input()
 
-    print("\nQueue Status:")
-    print("AL1:", AL1.size(),
-          "BL1:", BL1.size(),
-          "CL1:", CL1.size(),
-          "DL1:", DL1.size(),
-          "AL2 (Priority):", AL2.size())
+    print("\nQueue Status")
+    print("A:", AL1.size(),
+          "B:", BL1.size(),
+          "C:", CL1.size(),
+          "D:", DL1.size(),
+          "A-Priority:", AL2.size())
 
-    # -------- PRIORITY CONDITION --------
-    if AL2.size() > 10:
-        print("Priority condition active: AL2 served first")
-        served = serve_queue(AL2, AL2.size())
+    # Priority handling
+    if AL2.size() >= PRIORITY_LIMIT:
+        print("Priority lane active")
+        served = serve(AL2, AL2.size())
         time.sleep(served * TIME_PER_VEHICLE)
 
-    # -------- NORMAL CONDITION --------
     else:
-        print(f"Green light on road {current_light}")
+        print("Normal traffic flow")
 
-        if current_light == "A":
-            serve_queue(AL1, 1)
-        elif current_light == "B":
-            serve_queue(BL1, 1)
-        elif current_light == "C":
-            serve_queue(CL1, 1)
-        elif current_light == "D":
-            serve_queue(DL1, 1)
+        queues = [AL1, BL1, CL1, DL1]
+        total = sum(q.size() for q in queues)
 
-        time.sleep(TIME_PER_VEHICLE)
-        next_light()
+        if total == 0:
+            print("No vehicles. Waiting...")
+            time.sleep(1)
+            continue
+
+        # Serve at least 1 vehicle if traffic exists
+        per_lane = max(1, total // len(queues))
+
+        for q in queues:
+            serve(q, per_lane)
+
+        time.sleep(per_lane * TIME_PER_VEHICLE)
 
     time.sleep(1)

@@ -1,6 +1,17 @@
 import time
 from myqueue import Queue
 
+total_served = 0
+served_per_road = {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "AL2": 0
+}
+priority_activations = 0
+cycle_count = 0
+
 # Incoming lanes
 AL1 = Queue()
 BL1 = Queue()
@@ -21,11 +32,10 @@ roads = ["A", "B", "C", "D"]
 current_road_index = 0
 
 TIME_PER_VEHICLE = 1
-GREEN_TIME = 3   # seconds per road
+GREEN_TIME = 3
 
 
 def read_input():
-    """Read vehicle arrivals from input.txt"""
     try:
         with open("input.txt", "r") as f:
             lines = f.readlines()
@@ -35,15 +45,16 @@ def read_input():
         for road in lines:
             road = road.strip()
             if road == "A":
-                AL2.enqueue("V")   # A has priority lane
+                AL2.enqueue("V")
             elif road in road_map:
                 road_map[road].enqueue("V")
     except FileNotFoundError:
         pass
 
 
-def serve(queue, seconds):
-    """Serve vehicles based on green light duration"""
+def serve(queue, seconds, road_name):
+    global total_served, served_per_road
+
     served = 0
     start = time.time()
 
@@ -52,6 +63,8 @@ def serve(queue, seconds):
             break
         queue.dequeue()
         served += 1
+        total_served += 1
+        served_per_road[road_name] += 1
         time.sleep(TIME_PER_VEHICLE)
 
     return served
@@ -71,8 +84,9 @@ while True:
 
     # Priority interrupt
     if AL2.size() > 10:
+        priority_activations += 1
         print("Priority light GREEN for AL2")
-        served = serve(AL2, GREEN_TIME)
+        served = serve(AL2, GREEN_TIME, "AL2")
         print("Vehicles passed from AL2:", served)
         continue
 
@@ -81,9 +95,17 @@ while True:
     queue = road_map[road]
 
     print(f"GREEN light for Road {road}")
-    served = serve(queue, GREEN_TIME)
+    served = serve(queue, GREEN_TIME, road)
     print(f"Vehicles passed from Road {road}:", served)
-
     current_road_index = (current_road_index + 1) % len(roads)
+    cycle_count += 1
+
+    if cycle_count % 5 == 0:
+      print("\n--- SIMULATION STATS ---")
+      print("Total vehicles served:", total_served)
+      print("Served per road:", served_per_road)
+      print("Priority activations:", priority_activations)
+      print("------------------------")
 
     time.sleep(1)
+

@@ -1,6 +1,8 @@
 import time
 from myqueue import Queue
 
+LOG_FILE = "simulation.log"
+
 total_served = 0
 served_per_road = {
     "A": 0,
@@ -69,6 +71,11 @@ def serve(queue, seconds, road_name):
 
     return served
 
+def log_event(message):
+    with open(LOG_FILE, "a") as log:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        log.write(f"[{timestamp}] {message}\n")
+
 
 while True:
     read_input()
@@ -84,19 +91,27 @@ while True:
 
     # Priority interrupt
     if AL2.size() > 10:
-        priority_activations += 1
-        print("Priority light GREEN for AL2")
-        served = serve(AL2, GREEN_TIME, "AL2")
-        print("Vehicles passed from AL2:", served)
-        continue
+     priority_activations += 1
+     log_event("Priority lane AL2 activated")
+     print("Priority light GREEN for AL2")
+     served = serve(AL2, GREEN_TIME, "AL2")
+     log_event(f"AL2 served {served} vehicles")
+     print("Vehicles passed from AL2:", served)
+     continue
+
 
     # Normal traffic light rotation
     road = roads[current_road_index]
     queue = road_map[road]
 
     print(f"GREEN light for Road {road}")
+    log_event(f"Green light for Road {road}")
+
     served = serve(queue, GREEN_TIME, road)
+    log_event(f"Road {road} served {served} vehicles")
+
     print(f"Vehicles passed from Road {road}:", served)
+
     current_road_index = (current_road_index + 1) % len(roads)
     cycle_count += 1
 

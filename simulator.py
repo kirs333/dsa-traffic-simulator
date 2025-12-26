@@ -7,6 +7,8 @@ PRIORITY_ACTIVATION_THRESHOLD = 10
 PRIORITY_RELEASE_THRESHOLD = 5
 STATS_PRINT_INTERVAL = 5
 
+cycle_history = []
+
 
 total_served = 0
 served_per_road = {
@@ -81,6 +83,14 @@ def log_event(message):
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         log.write(f"[{timestamp}] {message}\n")
 
+def record_cycle(road, served, priority_used):
+    entry = {
+        "time": time.strftime("%H:%M:%S"),
+        "road": road,
+        "served": served,
+        "priority": priority_used
+    }
+    cycle_history.append(entry)
 
 while True:
     read_input()
@@ -101,6 +111,7 @@ while True:
      print("Priority light GREEN for AL2")
      served = serve(AL2, GREEN_TIME, "AL2")
      log_event(f"AL2 served {served} vehicles")
+     record_cycle("AL2", served, True)
      print("Vehicles passed from AL2:", served)
      continue
 
@@ -115,6 +126,8 @@ while True:
     served = serve(queue, GREEN_TIME, road)
     log_event(f"Road {road} served {served} vehicles")
 
+    record_cycle(road, served, False) 
+
     print(f"Vehicles passed from Road {road}:", served)
 
     current_road_index = (current_road_index + 1) % len(roads)
@@ -125,7 +138,9 @@ while True:
       print("Total vehicles served:", total_served)
       print("Served per road:", served_per_road)
       print("Priority activations:", priority_activations)
+      print("Recent cycles:")
+      for entry in cycle_history[-5:]:
+        print(entry)
       print("------------------------")
-
     time.sleep(1)
 

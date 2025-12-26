@@ -2,6 +2,7 @@ import time
 from myqueue import Queue
 
 LOG_FILE = "simulation.log"
+HISTORY_FILE = "history.txt"
 
 PRIORITY_ACTIVATION_THRESHOLD = 10
 PRIORITY_RELEASE_THRESHOLD = 5
@@ -100,6 +101,13 @@ def get_next_road():
     light_queue.enqueue(road)
     return road
 
+def export_history():
+    with open(HISTORY_FILE, "w") as f:
+        f.write("Time,Road,Served,Priority\n")
+        for entry in cycle_history:
+            line = f"{entry['time']},{entry['road']},{entry['served']},{entry['priority']}\n"
+            f.write(line)
+
 while True:
     read_input()
 
@@ -151,6 +159,8 @@ while True:
       print("Recent cycles:")
       for entry in cycle_history[-5:]:
         print(entry)
+        export_history()
+
       print("------------------------")
     time.sleep(1)
 

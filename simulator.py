@@ -108,59 +108,76 @@ def export_history():
             line = f"{entry['time']},{entry['road']},{entry['served']},{entry['priority']}\n"
             f.write(line)
 
-while True:
-    read_input()
+try:
+    while True:
+        read_input()
 
-    print("\nQueue Status:")
-    print(
-        "AL1:", AL1.size(),
-        "BL1:", BL1.size(),
-        "CL1:", CL1.size(),
-        "DL1:", DL1.size(),
-        "| AL2 (Priority):", AL2.size()
-    )
+        print("\nQueue Status:")
+        print(
+            "AL1:", AL1.size(),
+            "BL1:", BL1.size(),
+            "CL1:", CL1.size(),
+            "DL1:", DL1.size(),
+            "| AL2 (Priority):", AL2.size()
+        )
 
-    # Priority interrupt
-    if AL2.size() > PRIORITY_ACTIVATION_THRESHOLD:
-     priority_activations += 1
-     log_event("Priority lane AL2 activated")
-     print("Priority light GREEN for AL2")
-     served = serve(AL2, GREEN_TIME, "AL2")
-     log_event(f"AL2 served {served} vehicles")
-     record_cycle("AL2", served, True)
-     print("Vehicles passed from AL2:", served)
-     light_queue.enqueue("A")
+        # Priority interrupt
+        if AL2.size() > PRIORITY_ACTIVATION_THRESHOLD:
+            priority_activations += 1
+            log_event("Priority lane AL2 activated")
+            print("Priority light GREEN for AL2")
+            served = serve(AL2, GREEN_TIME, "AL2")
+            log_event(f"AL2 served {served} vehicles")
+            record_cycle("AL2", served, True)
+            print("Vehicles passed from AL2:", served)
+            light_queue.enqueue("A")
 
-     continue
+            continue
 
 
-    # Normal traffic light rotation
-    road = get_next_road()
-    queue = road_map[road]
+        # Normal traffic light rotation
+        road = get_next_road()
+        queue = road_map[road]
 
-    print(f"GREEN light for Road {road}")
-    log_event(f"Green light for Road {road}")
+        print(f"GREEN light for Road {road}")
+        log_event(f"Green light for Road {road}")
 
-    served = serve(queue, GREEN_TIME, road)
-    log_event(f"Road {road} served {served} vehicles")
+        served = serve(queue, GREEN_TIME, road)
+        log_event(f"Road {road} served {served} vehicles")
 
-    record_cycle(road, served, False) 
+        record_cycle(road, served, False) 
 
-    print(f"Vehicles passed from Road {road}:", served)
+        print(f"Vehicles passed from Road {road}:", served)
 
-    current_road_index = (current_road_index + 1) % len(roads)
-    cycle_count += 1
+        current_road_index = (current_road_index + 1) % len(roads)
+        cycle_count += 1
 
-    if cycle_count % STATS_PRINT_INTERVAL == 0:
-      print("\n--- SIMULATION STATS ---")
-      print("Total vehicles served:", total_served)
-      print("Served per road:", served_per_road)
-      print("Priority activations:", priority_activations)
-      print("Recent cycles:")
-      for entry in cycle_history[-5:]:
-        print(entry)
-        export_history()
+        if cycle_count % STATS_PRINT_INTERVAL == 0:
+            print("\n--- SIMULATION STATS ---")
+            print("Total vehicles served:", total_served)
+            print("Served per road:", served_per_road)
+            print("Priority activations:", priority_activations)
+            print("Recent cycles:")
+            for entry in cycle_history[-5:]:
+                print(entry)
+                export_history()
 
-      print("------------------------")
-    time.sleep(1)
+            print("------------------------")
+        time.sleep(1)
+        
+except KeyboardInterrupt:
+    print("\n\nSimulation stopped by user.")
+    print("Final Statistics:")
+    print("Total vehicles served:", total_served)
+    print("Served per road:", served_per_road)
+    print("Priority activations:", priority_activations)
+
+    export_history()
+    log_event("Simulation stopped manually")
+
+    print("History exported. Exiting safely.")
+
+except KeyboardInterrupt:
+    print("\nSimulation stopped.")
+    export_history()
 

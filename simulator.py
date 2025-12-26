@@ -3,6 +3,11 @@ from myqueue import Queue
 
 LOG_FILE = "simulation.log"
 
+PRIORITY_ACTIVATION_THRESHOLD = 10
+PRIORITY_RELEASE_THRESHOLD = 5
+STATS_PRINT_INTERVAL = 5
+
+
 total_served = 0
 served_per_road = {
     "A": 0,
@@ -90,7 +95,7 @@ while True:
     )
 
     # Priority interrupt
-    if AL2.size() > 10:
+    if AL2.size() > PRIORITY_ACTIVATION_THRESHOLD:
      priority_activations += 1
      log_event("Priority lane AL2 activated")
      print("Priority light GREEN for AL2")
@@ -115,7 +120,7 @@ while True:
     current_road_index = (current_road_index + 1) % len(roads)
     cycle_count += 1
 
-    if cycle_count % 5 == 0:
+    if cycle_count % STATS_PRINT_INTERVAL == 0:
       print("\n--- SIMULATION STATS ---")
       print("Total vehicles served:", total_served)
       print("Served per road:", served_per_road)

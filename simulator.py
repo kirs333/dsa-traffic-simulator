@@ -1,12 +1,17 @@
 import time
 from myqueue import Queue
 
+
 LOG_FILE = "simulation.log"
 HISTORY_FILE = "history.txt"
 
+TIME_PER_VEHICLE = 1          # seconds per vehicle
+GREEN_TIME = 3               # green light duration per road
+STATS_PRINT_INTERVAL = 5     # cycles between stats print
+
 PRIORITY_ACTIVATION_THRESHOLD = 10
 PRIORITY_RELEASE_THRESHOLD = 5
-STATS_PRINT_INTERVAL = 5
+
 light_queue = Queue()
 
 cycle_history = []
@@ -164,7 +169,7 @@ try:
 
             print("------------------------")
         time.sleep(1)
-        
+
 except KeyboardInterrupt:
     print("\n\nSimulation stopped by user.")
     print("Final Statistics:")

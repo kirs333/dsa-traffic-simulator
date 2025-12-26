@@ -6,6 +6,7 @@ LOG_FILE = "simulation.log"
 PRIORITY_ACTIVATION_THRESHOLD = 10
 PRIORITY_RELEASE_THRESHOLD = 5
 STATS_PRINT_INTERVAL = 5
+light_queue = Queue()
 
 cycle_history = []
 
@@ -91,6 +92,13 @@ def record_cycle(road, served, priority_used):
         "priority": priority_used
     }
     cycle_history.append(entry)
+for road in roads:
+  light_queue.enqueue(road)
+
+def get_next_road():
+    road = light_queue.dequeue()
+    light_queue.enqueue(road)
+    return road
 
 while True:
     read_input()
@@ -113,11 +121,13 @@ while True:
      log_event(f"AL2 served {served} vehicles")
      record_cycle("AL2", served, True)
      print("Vehicles passed from AL2:", served)
+     light_queue.enqueue("A")
+
      continue
 
 
     # Normal traffic light rotation
-    road = roads[current_road_index]
+    road = get_next_road()
     queue = road_map[road]
 
     print(f"GREEN light for Road {road}")

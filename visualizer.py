@@ -5,22 +5,15 @@ import random
 WIDTH = 700
 HEIGHT = 500
 root = tk.Tk()
-root.title("Traffic Junction Simulation")
+root.title("Smart Queue-Based Traffic System")
 
-canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg="white")
+canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg="#8B7355")
 canvas.pack()
 
 # ================= CONSTANTS =================
-ROAD_COLOR = "#dddddd"
-CENTER_COLOR = "#bbbbbb"
+ROAD_COLOR = "#4A4A4A"
+CENTER_COLOR = "#5A5A5A"
 
-# Vertical lanes (top to bottom traffic) - much wider spacing
-VERT_LANES = [310, 350, 390]  # leftmost (310) is priority lane AL2
-
-# Horizontal lanes (left to right traffic) - much wider spacing, evenly distributed
-HORZ_LANES = [215, 250, 285]
-
-# Intersection boundaries - made much wider
 INTERSECTION = {
     'x1': 280,
     'x2': 420,
@@ -28,292 +21,504 @@ INTERSECTION = {
     'y2': 315
 }
 
-# Stop lines (where cars should stop at red lights)
-VERT_STOP_LINE = INTERSECTION['y2'] + 15  # Bottom of intersection + buffer
-HORZ_STOP_LINE = INTERSECTION['x1'] - 15  # Left of intersection - buffer
-
 CAR_SPEED = 3
-GAP = 30  # Further reduced gap
+GAP = 40
 
-# ================= DRAW ROADS =================
-# Vertical road - much wider
-canvas.create_rectangle(280, 0, 420, HEIGHT, fill=ROAD_COLOR, outline="")
-# Horizontal road - much wider
-canvas.create_rectangle(0, 185, WIDTH, 315, fill=ROAD_COLOR, outline="")
-# Intersection
-canvas.create_rectangle(
-    INTERSECTION['x1'], INTERSECTION['y1'], 
-    INTERSECTION['x2'], INTERSECTION['y2'], 
-    fill=CENTER_COLOR, outline=""
-)
+# Traffic Control Constants
+TIME_PER_CAR = 800  # ms required for one car to pass
+MIN_DURATION = 2000  # Minimum green light time
+PRIORITY_LANE = "up"  # Define which lane has priority
+PRIORITY_THRESHOLD = 10  # Trigger priority mode when queue > 10
+PRIORITY_RELEASE = 5  # Exit priority mode when queue < 5
 
-# Lane markings for vertical road - solid black lines, evenly spaced
-canvas.create_line(330, 0, 330, HEIGHT, fill="black", width=2)  # Between lane 1 and 2
-canvas.create_line(370, 0, 370, HEIGHT, fill="black", width=2)  # Between lane 2 and 3
-
-# Lane markings for horizontal road - solid black lines, evenly spaced
-canvas.create_line(0, 232, WIDTH, 232, fill="black", width=2)  # Between lane 1 and 2
-canvas.create_line(0, 267, WIDTH, 267, fill="black", width=2)  # Between lane 2 and 3
+# LANE CENTERS
+VERT_LEFT = 303
+VERT_MIDDLE = 350
+VERT_RIGHT = 397
+HORZ_TOP = 208
+HORZ_MIDDLE = 255
+HORZ_BOTTOM = 302
 
 # Stop lines
-canvas.create_line(280, VERT_STOP_LINE, 420, VERT_STOP_LINE, fill="white", width=3)
-canvas.create_line(HORZ_STOP_LINE, 185, HORZ_STOP_LINE, 315, fill="white", width=3)
+STOP_UP = INTERSECTION['y2'] + 10
+STOP_DOWN = INTERSECTION['y1'] - 10
+STOP_RIGHT = INTERSECTION['x1'] - 10
+STOP_LEFT = INTERSECTION['x2'] + 10
 
-# ================= TRAFFIC LIGHTS =================
-# Vertical traffic lights (below intersection, for vertical traffic)
-light_v_red = canvas.create_oval(340, 305, 355, 320, fill="red")
-light_v_green = canvas.create_oval(360, 305, 375, 320, fill="gray")
+# ================= QUEUE SYSTEM =================
+lane_queues = {
+    "up": [],
+    "down": [],
+    "left": [],
+    "right": []
+}
 
-# Horizontal traffic lights (left of intersection, for horizontal traffic)
-light_h_red = canvas.create_oval(280, 225, 295, 240, fill="gray")
-light_h_green = canvas.create_oval(280, 245, 295, 260, fill="green")
+current_green_direction = "up"  # Start with UP lane
 
-current_green = "horizontal"
+# ================= DRAW ROADS =================
+canvas.create_rectangle(280, 0, 420, HEIGHT, fill=ROAD_COLOR, outline="")
+canvas.create_rectangle(0, 185, WIDTH, 315, fill=ROAD_COLOR, outline="")
+canvas.create_rectangle(INTERSECTION['x1'], INTERSECTION['y1'], 
+                       INTERSECTION['x2'], INTERSECTION['y2'], 
+                       fill=CENTER_COLOR, outline="")
 
-# ================= HELPER FUNCTIONS =================
-def intersection_clear():
-    """Check if any car is currently in the intersection"""
-    for lane in cars_vertical.values():
-        for car in lane:
-            if car.in_intersection():
-                return False
-    for lane in cars_horizontal.values():
-        for car in lane:
-            if car.in_intersection():
-                return False
-    return True
+# Lane dividers
+canvas.create_line(320, 0, 320, HEIGHT, fill="white", width=2, dash=(10, 10))
+canvas.create_line(380, 0, 380, HEIGHT, fill="white", width=2, dash=(10, 10))
+canvas.create_line(0, 227, WIDTH, 227, fill="white", width=2, dash=(10, 10))
+canvas.create_line(0, 263, WIDTH, 263, fill="white", width=2, dash=(10, 10))
 
-def switch_lights():
-    """Switch traffic lights between horizontal and vertical"""
-    global current_green
+# Stop lines
+canvas.create_line(280, STOP_UP, 420, STOP_UP, fill="yellow", width=3)
+canvas.create_line(280, STOP_DOWN, 420, STOP_DOWN, fill="yellow", width=3)
+canvas.create_line(STOP_RIGHT, 185, STOP_RIGHT, 315, fill="yellow", width=3)
+canvas.create_line(STOP_LEFT, 185, STOP_LEFT, 315, fill="yellow", width=3)
+
+# ================= TRAFFIC LIGHTS (4 separate lights) =================
+# UP lane light (bottom of intersection)
+light_up = canvas.create_oval(345, 320, 360, 335, fill="red", outline="white", width=2)
+canvas.create_text(352, 345, text="UP", fill="white", font=("Arial", 8, "bold"))
+
+# DOWN lane light (top of intersection)
+light_down = canvas.create_oval(365, 175, 380, 190, fill="red", outline="white", width=2)
+canvas.create_text(372, 165, text="DOWN", fill="white", font=("Arial", 8, "bold"))
+
+# LEFT lane light (right of intersection)
+light_left = canvas.create_oval(425, 245, 440, 260, fill="red", outline="white", width=2)
+canvas.create_text(450, 252, text="LEFT", fill="white", font=("Arial", 8, "bold"))
+
+# RIGHT lane light (left of intersection)
+light_right = canvas.create_oval(260, 265, 275, 280, fill="red", outline="white", width=2)
+canvas.create_text(245, 272, text="RIGHT", fill="white", font=("Arial", 8, "bold"))
+
+traffic_lights = {
+    "up": light_up,
+    "down": light_down,
+    "left": light_left,
+    "right": light_right
+}
+
+# Queue counter display
+queue_text = canvas.create_text(10, 10, anchor="nw", text="", fill="white", 
+                                font=("Arial", 10, "bold"))
+
+# ================= SMART TRAFFIC CONTROLLER =================
+def update_traffic_lights_graphics(direction):
+    """Update visual traffic lights - only one direction is green"""
+    for dir_name, light in traffic_lights.items():
+        if dir_name == direction:
+            canvas.itemconfig(light, fill="green")
+        else:
+            canvas.itemconfig(light, fill="red")
+
+def update_queue_display():
+    """Display queue counts on screen"""
+    text = "Queue Counts:\n"
+    for direction in ["up", "down", "left", "right"]:
+        count = len(lane_queues[direction])
+        indicator = " ← GREEN" if direction == current_green_direction else ""
+        priority_mark = " [PRIORITY]" if direction == PRIORITY_LANE else ""
+        text += f"{direction.upper()}: {count}{priority_mark}{indicator}\n"
+    canvas.itemconfig(queue_text, text=text)
+
+def smart_traffic_controller():
+    global current_green_direction
     
-    if not intersection_clear():
-        root.after(500, switch_lights)
-        return
-
-    if current_green == "horizontal":
-        current_green = "vertical"
-        canvas.itemconfig(light_v_red, fill="gray")
-        canvas.itemconfig(light_v_green, fill="green")
-        canvas.itemconfig(light_h_red, fill="red")
-        canvas.itemconfig(light_h_green, fill="gray")
+    # Measure queues
+    priority_count = len(lane_queues[PRIORITY_LANE])
+    
+    next_direction = ""
+    duration = 0
+    
+    # PRIORITY LOGIC CHECK
+    if priority_count > PRIORITY_THRESHOLD:
+        if current_green_direction != PRIORITY_LANE:
+            # Switch immediately to Priority Lane
+            next_direction = PRIORITY_LANE
+            # Add buffer time for priority lane too
+            duration = (priority_count * TIME_PER_CAR) + 2000
+            print(f"⚠️ PRIORITY MODE ACTIVATED: {priority_count} cars in {PRIORITY_LANE.upper()}")
+        else:
+            # Already serving priority lane
+            if priority_count < PRIORITY_RELEASE:
+                # Priority satisfied, resume normal cycle
+                print(f"✓ Priority cleared ({priority_count} < {PRIORITY_RELEASE}), resuming normal cycle")
+                order = ["up", "left", "down", "right"]
+                current_index = order.index(current_green_direction)
+                next_direction = order[(current_index + 1) % 4]
+                duration = MIN_DURATION
+            else:
+                # Still high traffic, keep priority lane green
+                next_direction = PRIORITY_LANE
+                duration = TIME_PER_CAR * 3  # Short extension
+                print(f"⚠️ Priority lane extended: {priority_count} cars remaining")
+    
+    # NORMAL CONDITION (Round Robin)
     else:
-        current_green = "horizontal"
-        canvas.itemconfig(light_v_red, fill="red")
-        canvas.itemconfig(light_v_green, fill="gray")
-        canvas.itemconfig(light_h_red, fill="gray")
-        canvas.itemconfig(light_h_green, fill="green")
-
-    root.after(3000, switch_lights)  # Faster light changes (3 seconds instead of 5)
+        # Cycle: up -> left -> down -> right -> up...
+        order = ["up", "left", "down", "right"]
+        current_index = order.index(current_green_direction)
+        next_direction = order[(current_index + 1) % 4]
+        
+        # Calculate duration based on queue length
+        waiting_cars = len(lane_queues[next_direction])
+        
+        # === FIXED TIMING LOGIC ===
+        
+        # 1. Base time needed for cars to pass
+        needed_time = waiting_cars * TIME_PER_CAR
+        
+        # 2. INCREASED STARTUP BUFFER (Fix for "Wasted Green Light")
+        # Increased from 1500 to 3000. 
+        # This gives 3 full seconds for the previous cycle's cars to clear out
+        # BEFORE we start counting the time against the current queue.
+        STARTUP_BUFFER = 3000 
+        
+        # 3. Ensure duration is NEVER shorter than MIN_DURATION (2000ms)
+        if waiting_cars > 0:
+            duration = max(MIN_DURATION, needed_time + STARTUP_BUFFER)
+        else:
+            duration = MIN_DURATION
+            
+        # === FIX ENDS HERE ===
+        
+        print(f"Normal cycle: {next_direction.upper()} ({waiting_cars} cars) - {duration}ms")
+    
+    # Execute switch
+    current_green_direction = next_direction
+    update_traffic_lights_graphics(next_direction)
+    update_queue_display()
+    
+    # Schedule next check
+    root.after(int(duration), smart_traffic_controller)
 
 # ================= CAR CLASS =================
 class Car:
-    def __init__(self, x, y, direction, lane, priority=False):
-        self.x = x
-        self.y = y
-        self.dir = direction
-        self.lane = lane
-        self.priority = priority
+    def __init__(self, spawn_direction, lane_type):
+        self.spawn_direction = spawn_direction
+        self.lane_type = lane_type
+        self.current_direction = spawn_direction
         self.turned = False
-        self.passed_intersection = False
-        self.turn_target_y = HORZ_LANES[2]  # Bottom horizontal lane (285) for turning cars
-
-        color = random.choice(
-            ["red", "blue", "green", "orange", "purple", "cyan", "yellow"]
+        self.passed = False
+        self.in_queue = False  # Track if car is in queue
+        
+        colors = ["#FF4444", "#4444FF", "#FFCC00", "#00CC66", "#FF8800", "#CC00CC"]
+        self.color = random.choice(colors)
+        
+        # Spawn logic (same as before)
+        if spawn_direction == "up":
+            self.y = HEIGHT + 40
+            if lane_type == "turn":
+                self.x = VERT_LEFT
+                self.target_lane = HORZ_BOTTOM
+            else:
+                self.x = VERT_MIDDLE
+                self.target_lane = None
+            self.w, self.h = 22, 30
+            
+        elif spawn_direction == "down":
+            self.y = -40
+            if lane_type == "turn":
+                self.x = VERT_RIGHT
+                self.target_lane = HORZ_TOP
+            else:
+                self.x = VERT_MIDDLE
+                self.target_lane = None
+            self.w, self.h = 22, 30
+            
+        elif spawn_direction == "right":
+            self.x = -40
+            if lane_type == "turn":
+                self.y = HORZ_TOP
+                self.target_lane = VERT_LEFT
+            else:
+                self.y = HORZ_MIDDLE
+                self.target_lane = None
+            self.w, self.h = 30, 22
+            
+        elif spawn_direction == "left":
+            self.x = WIDTH + 40
+            if lane_type == "turn":
+                self.y = HORZ_BOTTOM
+                self.target_lane = VERT_RIGHT
+            else:
+                self.y = HORZ_MIDDLE
+                self.target_lane = None
+            self.w, self.h = 30, 22
+        
+        # Draw car
+        self.body = canvas.create_rectangle(
+            self.x - self.w/2, self.y - self.h/2,
+            self.x + self.w/2, self.y + self.h/2,
+            fill=self.color, outline="white", width=1
         )
-
-        if direction == "vertical":
-            self.body = canvas.create_rectangle(
-                x - 14, y - 10, x + 14, y + 10, fill=color
-            )
-            self.w1 = canvas.create_oval(x - 12, y - 8, x - 4, y, fill="black")
-            self.w2 = canvas.create_oval(x + 4, y - 8, x + 12, y, fill="black")
-        else:  # horizontal
-            self.body = canvas.create_rectangle(
-                x - 10, y - 14, x + 10, y + 14, fill=color
-            )
-            self.w1 = canvas.create_oval(x - 8, y - 12, x, y - 4, fill="black")
-            self.w2 = canvas.create_oval(x - 8, y + 4, x, y + 12, fill="black")
-
-    def move(self, dx, dy):
+        
+        # Indicator dot
+        indicator_color = "orange" if lane_type == "turn" else "lightblue"
+        self.indicator = canvas.create_oval(
+            self.x - 4, self.y - 4, self.x + 4, self.y + 4,
+            fill=indicator_color, outline=""
+        )
+    
+    def check_and_execute_turn(self):
+        if self.lane_type != "turn" or self.turned:
+            return
+        
+        turned = False
+        
+        if self.spawn_direction == "up":
+            if self.y <= self.target_lane:
+                self.y = self.target_lane
+                self.current_direction = "left"
+                turned = True
+                
+        elif self.spawn_direction == "down":
+            if self.y >= self.target_lane:
+                self.y = self.target_lane
+                self.current_direction = "right"
+                turned = True
+                
+        elif self.spawn_direction == "right":
+            if self.x >= self.target_lane:
+                self.x = self.target_lane
+                self.current_direction = "up"
+                turned = True
+                
+        elif self.spawn_direction == "left":
+            if self.x <= self.target_lane:
+                self.x = self.target_lane
+                self.current_direction = "down"
+                turned = True
+        
+        if turned:
+            self.turned = True
+            self.w, self.h = self.h, self.w
+            canvas.coords(self.body,
+                          self.x - self.w/2, self.y - self.h/2,
+                          self.x + self.w/2, self.y + self.h/2)
+            canvas.coords(self.indicator,
+                          self.x - 4, self.y - 4,
+                          self.x + 4, self.y + 4)
+    
+    def move(self):
+        self.check_and_execute_turn()
+        
+        dx, dy = 0, 0
+        if self.current_direction == "up":
+            dy = -CAR_SPEED
+        elif self.current_direction == "down":
+            dy = CAR_SPEED
+        elif self.current_direction == "left":
+            dx = -CAR_SPEED
+        elif self.current_direction == "right":
+            dx = CAR_SPEED
+        
         canvas.move(self.body, dx, dy)
-        canvas.move(self.w1, dx, dy)
-        canvas.move(self.w2, dx, dy)
+        canvas.move(self.indicator, dx, dy)
         self.x += dx
         self.y += dy
-
+    
     def in_intersection(self):
-        """Check if car is currently inside the intersection"""
-        return (INTERSECTION['x1'] < self.x < INTERSECTION['x2'] and 
-                INTERSECTION['y1'] < self.y < INTERSECTION['y2'])
+        # Reduced the buffer from 30 to 10.
+        # This means a car has to be deeper inside the intersection to count as "in it".
+        # This prevents cars waiting at the stop line from triggering the "blocked" flag.
+        buffer = 10
+        return (INTERSECTION['x1'] - buffer < self.x < INTERSECTION['x2'] + buffer and 
+                INTERSECTION['y1'] - buffer < self.y < INTERSECTION['y2'] + buffer)
+    
+    def is_intersection_blocked(self):
+        """Check if the intersection is blocked by STRAIGHT cars from OTHER directions"""
+        for other in cars:
+            if other == self: 
+                continue
+            
+            # CRITICAL FIX: Ignore turning cars completely.
+            # In this simulation, turning cars stay in outer lanes and 
+            # physically cannot block the center box.
+            if other.lane_type == "turn":
+                continue
 
-    def can_move_vertical(self, front_car):
-        """Determine if vertical car can move forward"""
-        # 1. If we have already passed or are inside, keep moving
-        if self.passed_intersection or self.in_intersection():
+            # If a STRAIGHT car is physically inside the intersection
+            if other.in_intersection():
+                # AND that car came from a DIFFERENT direction
+                if other.spawn_direction != self.spawn_direction:
+                    return True
+        return False
+    
+    def can_move(self, front_car):
+        """Check if car can move (Lights + Clearance + Collision)"""
+        # 1. If we have already passed the intersection, just drive
+        if self.passed:
+            self.remove_from_queue()
             return True
         
-        dist_to_stop_line = self.y - VERT_STOP_LINE
-
-        # 2. Priority Lane Logic (ignores traffic lights)
-        if self.priority:
-            pass # Priority cars ignore lights and intersection checks
+        # 2. If we are currently INSIDE the intersection, keep moving (don't stop in middle)
+        if self.in_intersection():
+            self.remove_from_queue()
+            return True
+        
+        # Calculate distance to stop line
+        dist = 0
+        if self.current_direction == "up":
+            dist = self.y - STOP_UP
+        elif self.current_direction == "down":
+            dist = STOP_DOWN - self.y
+        elif self.current_direction == "right":
+            dist = STOP_RIGHT - self.x
+        elif self.current_direction == "left":
+            dist = self.x - STOP_LEFT
+        
+        # 3. Traffic Light Check (STOP at RED)
+        # Only applies to STRAIGHT cars
+        if self.lane_type == "straight":
+            is_green = (self.current_direction == current_green_direction)
             
-        # 3. Normal Lanes Logic
-        else:
-            # Condition A: Stop if the light is Red
-            if current_green != "vertical" and 0 <= dist_to_stop_line <= GAP:
+            # If Red Light AND we are approaching stop line
+            if not is_green and 0 <= dist <= GAP:
+                self.add_to_queue()
                 return False
-            
-            # Condition B: CRASH PREVENTION - Check if HORIZONTAL cars are blocking
-            # Even if the light is Green, we must wait if a HORIZONTAL car is still inside
-            horizontal_is_in_way = False
-            for lane in cars_horizontal.values():
-                for h_car in lane:
-                    if h_car.in_intersection():
-                        horizontal_is_in_way = True
-                        break
-                if horizontal_is_in_way:
-                    break
-            
-            # If horizontal traffic is blocking us, wait at the line
-            if horizontal_is_in_way and 0 <= dist_to_stop_line <= GAP:
-                return False
+        
+            # 4. INTERSECTION CLEARANCE CHECK (The Fix for Gridlock)
+            # === TURNING CARS BYPASS THIS CHECK ===
+            # We ONLY check if the intersection is blocked if we are going STRAIGHT.
+            # Turning cars stay on the edge, so they ignore the center blockage.
+            if 0 <= dist <= GAP:  
+                if self.is_intersection_blocked():
+                    return False
+            # ======================================
 
-        # 4. Gap Check (Prevent rear-ending the car in front)
-        if front_car and not front_car.turned:
-            # Vertical cars move UP (y decreases), so Self.y > Front.y
-            gap = self.y - front_car.y
+        # 5. Front Car Collision Check (Don't hit the guy ahead of you)
+        # This still applies to everyone (even turning cars shouldn't rear-end people)
+        if front_car:
+            gap = 0
+            if self.current_direction == "up":
+                gap = self.y - front_car.y
+            elif self.current_direction == "down":
+                gap = front_car.y - self.y
+            elif self.current_direction == "right":
+                gap = front_car.x - self.x
+            elif self.current_direction == "left":
+                gap = self.x - front_car.x
+            
             if 0 < gap < GAP:
                 return False
         
+        # If we passed all checks, we can move!
+        self.remove_from_queue()
         return True
-
-    def can_move_horizontal(self, front_car):
-        """Determine if horizontal car can move forward"""
-        # 1. If we have already passed or are inside, keep moving
-        if self.passed_intersection or self.in_intersection():
-            return True
-        
-        dist_to_stop_line = HORZ_STOP_LINE - self.x
-        
-        # 2. Stop if the light is Red AND we are close to the stop line
-        if current_green != "horizontal" and 0 <= dist_to_stop_line <= GAP:
-            return False
-        
-        # 3. CRASH PREVENTION - Check if VERTICAL cars are blocking
-        # Even if the light is Green, wait if a VERTICAL car is still inside
-        vertical_is_in_way = False
-        for lane in cars_vertical.values():
-            for v_car in lane:
-                if v_car.in_intersection():
-                    vertical_is_in_way = True
-                    break
-            if vertical_is_in_way:
-                break
-        
-        # If vertical traffic is blocking us, wait at the line
-        if vertical_is_in_way and 0 <= dist_to_stop_line <= GAP:
-            return False
-        
-        # 4. Gap Check (Prevent rear-ending)
-        if front_car:
-            # Horizontal cars move RIGHT, so front_car.x is LARGER than self.x
-            gap = front_car.x - self.x
-            # Stop if the car in front is too close
-            if 0 < gap < GAP + 25:  # Added buffer for car size
-                return False
-        
-        return True
-
+    
+    def add_to_queue(self):
+        """Add car to waiting queue if not already in it"""
+        if not self.in_queue and self.lane_type == "straight":
+            if self not in lane_queues[self.current_direction]:
+                lane_queues[self.current_direction].append(self)
+                self.in_queue = True
+    
+    def remove_from_queue(self):
+        """Remove car from waiting queue"""
+        if self.in_queue:
+            try:
+                lane_queues[self.current_direction].remove(self)
+                self.in_queue = False
+            except ValueError:
+                pass  # Car already removed
+    
+    def off_screen(self):
+        return (self.x < -60 or self.x > WIDTH + 60 or 
+                self.y < -60 or self.y > HEIGHT + 60)
+    
     def destroy(self):
+        self.remove_from_queue()  # Clean up queue when car is destroyed
         canvas.delete(self.body)
-        canvas.delete(self.w1)
-        canvas.delete(self.w2)
+        canvas.delete(self.indicator)
 
 # ================= STORAGE =================
-cars_vertical = {x: [] for x in VERT_LANES}
-cars_horizontal = {y: [] for y in HORZ_LANES}
+cars = []
 
-# ================= SPAWN FUNCTIONS =================
-def spawn_vertical():
-    lane = random.choice(VERT_LANES)
-    priority = (lane == VERT_LANES[0])  # Leftmost lane is priority
-    car = Car(lane, HEIGHT + 40, "vertical", lane, priority)
-    cars_vertical[lane].append(car)
-    root.after(random.randint(1800, 2500), spawn_vertical)  # Reduced spawn rate
+# ================= HELPER FUNCTIONS =================
+def get_lane_id(car):
+    if car.current_direction in ["up", "down"]:
+        return (car.current_direction, round(car.x / 15) * 15)
+    else:
+        return (car.current_direction, round(car.y / 15) * 15)
 
-def spawn_horizontal():
-    # Only spawn in top two lanes (not the bottommost lane at 285)
-    lane = random.choice([HORZ_LANES[0], HORZ_LANES[1]])  # Only lanes 215 and 250
-    car = Car(-40, lane, "horizontal", lane)
-    cars_horizontal[lane].append(car)
-    root.after(random.randint(2200, 3000), spawn_horizontal)  # Reduced spawn rate
+def find_car_ahead(car):
+    lane_id = get_lane_id(car)
+    closest = None
+    min_dist = float('inf')
+    
+    for other in cars:
+        if other == car or get_lane_id(other) != lane_id:
+            continue
+        
+        dist = 0
+        if car.current_direction == "up":
+            dist = car.y - other.y
+        elif car.current_direction == "down":
+            dist = other.y - car.y
+        elif car.current_direction == "right":
+            dist = other.x - car.x
+        elif car.current_direction == "left":
+            dist = car.x - other.x
+        
+        if 0 < dist < min_dist:
+            min_dist = dist
+            closest = other
+    
+    return closest
 
-# ================= ANIMATION LOOP =================
+# ================= SPAWN & ANIMATE =================
+def spawn_car():
+    # 70% chance to spawn UP cars to test priority queue faster
+    if random.randint(0, 10) < 7:
+        direction = "up"
+    else:
+        direction = random.choice(["down", "left", "right"])
+    
+    lane_type = random.choice(["straight", "turn"])
+    
+    car = Car(direction, lane_type)
+    cars.append(car)
+    
+    # Heavy traffic: spawn every 0.4-0.8 seconds to build up queues
+    root.after(random.randint(400, 800), spawn_car)
+
 def animate():
-    # Animate vertical cars (moving upward)
-    for lane, lane_cars in cars_vertical.items():
-        for i, car in enumerate(lane_cars):
-            front_car = lane_cars[i - 1] if i > 0 else None
+    for car in cars[:]:
+        front = find_car_ahead(car)
+        
+        if car.can_move(front):
+            car.move()
             
-            # Priority lane turns left
-            if car.priority:
-                # Start turning when reaching the bottom horizontal lane level
-                if not car.turned and car.y <= car.turn_target_y:
-                    car.dir = "horizontal"
-                    car.turned = True
-                    car.y = car.turn_target_y  # Snap to the bottom lane immediately
-                
-                if car.turned:
-                    # Move left on the bottom lane
-                    car.move(-CAR_SPEED, 0)
-                    if car.x < INTERSECTION['x1']:
-                        car.passed_intersection = True
-                else:
-                    # Moving up before turn - stop at the bottom horizontal lane level
-                    if car.can_move_vertical(front_car) and car.y > car.turn_target_y:
-                        car.move(0, -CAR_SPEED)
-                    elif car.y <= car.turn_target_y:
-                        # Ready to turn
-                        car.turned = True
-                        car.dir = "horizontal"
-                        car.y = car.turn_target_y
-            else:
-                # Normal lanes go straight
-                if car.can_move_vertical(front_car):
-                    car.move(0, -CAR_SPEED)
-                    # Mark as passed once beyond intersection
-                    if car.y < INTERSECTION['y1']:
-                        car.passed_intersection = True
-            
-            # Remove cars that left the screen
-            if car.y < -60 or car.x < -60:
-                car.destroy()
-                lane_cars.remove(car)
+            # Mark as passed
+            if car.current_direction == "up" and car.y < INTERSECTION['y1'] - 30:
+                car.passed = True
+            elif car.current_direction == "down" and car.y > INTERSECTION['y2'] + 30:
+                car.passed = True
+            elif car.current_direction == "right" and car.x > INTERSECTION['x2'] + 30:
+                car.passed = True
+            elif car.current_direction == "left" and car.x < INTERSECTION['x1'] - 30:
+                car.passed = True
+        
+        if car.off_screen():
+            car.destroy()
+            cars.remove(car)
+    
+    # Update queue display periodically
+    update_queue_display()
+    
+    root.after(30, animate)
 
-    # Animate horizontal cars (moving right)
-    for lane, lane_cars in cars_horizontal.items():
-        for i, car in enumerate(lane_cars):
-            front_car = lane_cars[i - 1] if i > 0 else None
-            
-            if car.can_move_horizontal(front_car):
-                car.move(CAR_SPEED, 0)
-                # Mark as passed once beyond intersection
-                if car.x > INTERSECTION['x2']:
-                    car.passed_intersection = True
-            
-            # Remove cars that left the screen
-            if car.x > WIDTH + 60:
-                car.destroy()
-                lane_cars.remove(car)
+# ================= START =================
+print("=" * 50)
+print("SMART QUEUE-BASED TRAFFIC SYSTEM")
+print("=" * 50)
+print(f"Priority Lane: {PRIORITY_LANE.upper()}")
+print(f"Priority activates when queue > {PRIORITY_THRESHOLD}")
+print(f"Priority releases when queue < {PRIORITY_RELEASE}")
+print("=" * 50)
 
-    root.after(40, animate)
-
-# ================= START SIMULATION =================
-spawn_vertical()
-spawn_horizontal()
+spawn_car()
 animate()
-switch_lights()
-
+smart_traffic_controller()
 root.mainloop()

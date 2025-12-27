@@ -231,3 +231,89 @@ class Car:
         canvas.delete(self.w1)
         canvas.delete(self.w2)
 
+# ================= STORAGE =================
+cars_vertical = {x: [] for x in VERT_LANES}
+cars_horizontal = {y: [] for y in HORZ_LANES}
+
+# ================= SPAWN FUNCTIONS =================
+def spawn_vertical():
+    lane = random.choice(VERT_LANES)
+    priority = (lane == VERT_LANES[0])  # Leftmost lane is priority
+    car = Car(lane, HEIGHT + 40, "vertical", lane, priority)
+    cars_vertical[lane].append(car)
+    root.after(random.randint(1800, 2500), spawn_vertical)  # Reduced spawn rate
+
+def spawn_horizontal():
+    # Only spawn in top two lanes (not the bottommost lane at 285)
+    lane = random.choice([HORZ_LANES[0], HORZ_LANES[1]])  # Only lanes 215 and 250
+    car = Car(-40, lane, "horizontal", lane)
+    cars_horizontal[lane].append(car)
+    root.after(random.randint(2200, 3000), spawn_horizontal)  # Reduced spawn rate
+
+# ================= ANIMATION LOOP =================
+def animate():
+    # Animate vertical cars (moving upward)
+    for lane, lane_cars in cars_vertical.items():
+        for i, car in enumerate(lane_cars):
+            front_car = lane_cars[i - 1] if i > 0 else None
+            
+            # Priority lane turns left
+            if car.priority:
+                # Start turning when reaching the bottom horizontal lane level
+                if not car.turned and car.y <= car.turn_target_y:
+                    car.dir = "horizontal"
+                    car.turned = True
+                    car.y = car.turn_target_y  # Snap to the bottom lane immediately
+                
+                if car.turned:
+                    # Move left on the bottom lane
+                    car.move(-CAR_SPEED, 0)
+                    if car.x < INTERSECTION['x1']:
+                        car.passed_intersection = True
+                else:
+                    # Moving up before turn - stop at the bottom horizontal lane level
+                    if car.can_move_vertical(front_car) and car.y > car.turn_target_y:
+                        car.move(0, -CAR_SPEED)
+                    elif car.y <= car.turn_target_y:
+                        # Ready to turn
+                        car.turned = True
+                        car.dir = "horizontal"
+                        car.y = car.turn_target_y
+            else:
+                # Normal lanes go straight
+                if car.can_move_vertical(front_car):
+                    car.move(0, -CAR_SPEED)
+                    # Mark as passed once beyond intersection
+                    if car.y < INTERSECTION['y1']:
+                        car.passed_intersection = True
+            
+            # Remove cars that left the screen
+            if car.y < -60 or car.x < -60:
+                car.destroy()
+                lane_cars.remove(car)
+
+    # Animate horizontal cars (moving right)
+    for lane, lane_cars in cars_horizontal.items():
+        for i, car in enumerate(lane_cars):
+            front_car = lane_cars[i - 1] if i > 0 else None
+            
+            if car.can_move_horizontal(front_car):
+                car.move(CAR_SPEED, 0)
+                # Mark as passed once beyond intersection
+                if car.x > INTERSECTION['x2']:
+                    car.passed_intersection = True
+            
+            # Remove cars that left the screen
+            if car.x > WIDTH + 60:
+                car.destroy()
+                lane_cars.remove(car)
+
+    root.after(40, animate)
+
+# ================= START SIMULATION =================
+spawn_vertical()
+spawn_horizontal()
+animate()
+switch_lights()
+
+root.mainloop()

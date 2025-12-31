@@ -147,7 +147,46 @@ The **Smart Queue-Based Traffic System** successfully demonstrates how Data Stru
 * **Ambulance Detection:** Adding a specific "Emergency Vehicle" class that triggers an immediate green light from any direction.
 * **Multi-Intersection Network:** Connecting multiple simulation windows to observe how traffic flows between different intersections.
 
+
 ---
+
+## 🔧 How to Run
+
+Since this project separates the **Input Generator** from the **Visualizer**, you need to run two scripts simultaneously.
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/kirs333/dsa-traffic-simulator.git
+cd dsa-traffic-simulator
+
+```
+
+### Step 2: Start the Traffic Generator
+
+This script generates vehicle data and writes it to the input file in real-time.
+
+1. Open your terminal or command prompt.
+2. Run the following command:
+```bash
+python generator.py
+
+```
+
+
+3. **Keep this terminal open.** You will see logs indicating that vehicles are being generated.
+
+### Step 3: Launch the Visualizer
+
+1. Open a **second** terminal window (do not close the generator).
+2. Run the visualizer script:
+```bash
+python visualizer.py
+
+```
+
+
+3. The GUI window will open, and the system will begin processing the live traffic data.
 
 ##  References
 
